@@ -23,6 +23,7 @@ import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import rules.jvm.external.ByteStreams;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -40,12 +41,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.logging.Logger;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
@@ -119,21 +115,40 @@ public class MavenPublisher {
       coords.version);
 
     byte[] toHash = Files.readAllBytes(item);
+    byte[] sha1 = toSha1(toHash).getBytes(UTF_8);
     Path md5 = Files.createTempFile(item.getFileName().toString(), ".md5");
     Files.write(md5, toMd5(toHash).getBytes(UTF_8));
 
-    Path sha1 = Files.createTempFile(item.getFileName().toString(), ".sha1");
-    Files.write(sha1, toSha1(toHash).getBytes(UTF_8));
+    Path sha1Path = Files.createTempFile(item.getFileName().toString(), ".sha1");
+    Files.write(sha1Path, sha1);
 
+    byte[] sha1OfPublishedItem = new byte[0];
+    if (isHttpOrHttps(base)) {
+
+      sha1OfPublishedItem = httpDownload(String.format("%s%s.sha1", base, append), credentials).getBytes(UTF_8);
+
+    }
     List<CompletableFuture<?>> uploads = new ArrayList<>();
-    uploads.add(upload(String.format("%s%s", base, append), credentials, item));
-    uploads.add(upload(String.format("%s%s.md5", base, append), credentials, md5));
-    uploads.add(upload(String.format("%s%s.sha1", base, append), credentials, sha1));
 
-    if (credentials.getGpgSign()) {
-      uploads.add(upload(String.format("%s%s.asc", base, append), credentials, sign(item)));
-      uploads.add(upload(String.format("%s%s.md5.asc", base, append), credentials, sign(md5)));
-      uploads.add(upload(String.format("%s%s.sha1.asc", base, append), credentials, sign(sha1)));
+    String mainItem = String.format("%s%s", base, append);
+
+    // If this build is reproducible ...
+    // ... don't upload if the previously uploaded item is the same SHA1
+    // as the one just built and about to be uploaded
+    if (Arrays.equals(sha1, sha1OfPublishedItem)) {
+      LOG.info(String.format("As it is unchhanged, skipping upload of %s ", mainItem));
+    } else {
+
+      uploads.add(upload(mainItem, credentials, item));
+      uploads.add(upload(String.format("%s%s.md5", base, append), credentials, md5));
+      uploads.add(upload(String.format("%s%s.sha1", base, append), credentials, sha1Path));
+
+      if (credentials.getGpgSign()) {
+        uploads.add(upload(String.format("%s%s.asc", base, append), credentials, sign(item)));
+        uploads.add(upload(String.format("%s%s.md5.asc", base, append), credentials, sign(md5)));
+        uploads.add(upload(String.format("%s%s.sha1.asc", base, append), credentials, sign(sha1Path)));
+      }
+
     }
 
     return CompletableFuture.allOf(uploads.toArray(new CompletableFuture<?>[0]));
@@ -159,7 +174,7 @@ public class MavenPublisher {
 
   private static CompletableFuture<Void> upload(String targetUrl, Credentials credentials, Path toUpload) {
     Callable<Void> callable;
-    if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
+    if (isHttpOrHttps(targetUrl)) {
       callable = httpUpload(targetUrl, credentials, toUpload);
     } else if (targetUrl.startsWith("gs://")) {
       callable = gcsUpload(targetUrl, toUpload);
@@ -177,6 +192,10 @@ public class MavenPublisher {
       }
     });
     return toReturn;
+  }
+
+  private static boolean isHttpOrHttps(String targetUrl) {
+    return targetUrl.startsWith("http://") || targetUrl.startsWith("https://");
   }
 
   private static Callable<Void> httpUpload(String targetUrl, Credentials credentials, Path toUpload) {
@@ -215,6 +234,37 @@ public class MavenPublisher {
       LOG.info(String.format("Upload to %s complete.", targetUrl));
       return null;
     };
+  }
+
+  private static String httpDownload(String targetUrl, Credentials credentials) throws IOException {
+    URL url = new URL(targetUrl);
+
+    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+    connection.setRequestMethod("GET");
+    connection.setDoOutput(true);
+    if (credentials.getUser() != null) {
+      String basicAuth = Base64.getEncoder().encodeToString(
+        String.format("%s:%s", credentials.getUser(), credentials.getPassword()).getBytes(US_ASCII));
+      connection.setRequestProperty("Authorization", "Basic " + basicAuth);
+    }
+
+    try (InputStream in = connection.getInputStream()) {
+
+      int code = connection.getResponseCode();
+
+      if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+        throw new RuntimeException(connection.getHeaderField("WWW-Authenticate"));
+      }
+
+      if (code == 200) {
+        return new String(in.readAllBytes(), UTF_8);
+      }
+    } catch (FileNotFoundException fnfe) {
+      return "Missing";
+
+    }
+    return "Missing";
+
   }
 
   private static Callable<Void> writeFile(String targetUrl, Path toUpload) {
