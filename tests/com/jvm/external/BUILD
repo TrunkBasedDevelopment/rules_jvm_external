@@ -10,6 +10,16 @@ java_test(
 )
 
 java_test(
+    name = "BinaryRepositoryInteropTest",
+    srcs = ["BinaryRepositoryInteropTest.java"],
+    test_class = "com.jvm.external.BinaryRepositoryInteropTest",
+    deps = [
+        "//private/tools/java/rules/jvm/external/maven:MavenPublisher"
+    ],
+)
+
+
+java_test(
     name = "GlobalArtifactExclusionsTest",
     srcs = ["GlobalArtifactExclusionsTest.java"],
     test_class = "com.jvm.external.GlobalArtifactExclusionsTest",

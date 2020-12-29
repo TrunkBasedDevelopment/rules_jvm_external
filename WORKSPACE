@@ -79,6 +79,7 @@ maven_install(
     artifacts = [
         "com.google.guava:guava:27.0-jre",
         "org.hamcrest:hamcrest-core:2.1",
+        "org.http4k:http4k-testing-servirtium:3.284.0",
     ],
     maven_install_json = "@rules_jvm_external//:maven_install.json",
     repositories = [
