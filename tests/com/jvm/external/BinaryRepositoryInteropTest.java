@@ -1,54 +1,49 @@
 package com.jvm.external;
 
+import static org.http4k.servirtium.InteractionStorage.Disk;
+
 import org.http4k.client.ApacheClient;
 import org.http4k.core.Uri;
 import org.http4k.server.SunHttp;
+import org.http4k.servirtium.InteractionOptions;
 import org.http4k.servirtium.ServirtiumServer;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.TestInfo;
+
 import rules.jvm.external.maven.MavenPublisher;
-import servirtium.http4k.ClimateApi;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-
-import static org.http4k.servirtium.InteractionStorage.Disk;
-import static servirtium.http4k.java.JUnitUtil.getMarkdownNameFrom;
 
 public class BinaryRepositoryInteropTest {
 
     public Uri uri() {
-        return Uri.of("http://localhost:" + servirtium.port());
+        return Uri.of("http://localhost:61417");
     }
 
     private ServirtiumServer servirtium;
 
-    @BeforeEach
-    public void start(TestInfo info) {
+    @Before
+    public void start() {
         servirtium = ServirtiumServer.Recording(
-                getMarkdownNameFrom(info),
-                "https://oss.sonatype.org/content/repositories/releases/",
-                Disk(new File("tests/resources")),
-                new ClimateInteractionOptions(), 0, SunHttp::new,
-                ApacheClient.create()
+            "fred.md",
+            Uri.of("https://oss.sonatype.org/content/repositories/releases/"),
+            Disk(new File("tests/resources")),
+            InteractionOptions.Defaults,
+            61417,
+            SunHttp::new,
+            ApacheClient.create()
         );
         servirtium.start();
     }
 
-    @AfterEach
+    @After
     public void stop() {
         servirtium.stop();
     }
 
     @Test
     public void test_cannotPushToSonatype() throws Exception {
-
         String pomPath = "/tmp/something";
         String binPath = "/tmp/something2";
         String srcPath = "/tmp/something3";

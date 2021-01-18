@@ -14,7 +14,10 @@ java_test(
     srcs = ["BinaryRepositoryInteropTest.java"],
     test_class = "com.jvm.external.BinaryRepositoryInteropTest",
     deps = [
-        "//private/tools/java/rules/jvm/external/maven:MavenPublisher"
+        "//private/tools/java/rules/jvm/external/maven:MavenPublisher",
+        "@maven//:org_http4k_http4k_testing_servirtium",
+        "@maven//:org_http4k_http4k_client_apache",
+        "@maven//:org_http4k_http4k_core",
     ],
 )
 
