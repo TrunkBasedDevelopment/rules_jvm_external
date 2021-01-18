@@ -14,6 +14,9 @@ import org.junit.Test;
 import rules.jvm.external.maven.MavenPublisher;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class BinaryRepositoryInteropTest {
 
@@ -27,7 +30,7 @@ public class BinaryRepositoryInteropTest {
     public void start() {
         servirtium = ServirtiumServer.Recording(
             "fred.md",
-            Uri.of("https://oss.sonatype.org/content/repositories/releases/"),
+            Uri.of("https://oss.sonatype.org"),
             Disk(new File("tests/resources")),
             InteractionOptions.Defaults,
             61417,
@@ -44,12 +47,23 @@ public class BinaryRepositoryInteropTest {
 
     @Test
     public void test_cannotPushToSonatype() throws Exception {
-        String pomPath = "/tmp/something";
-        String binPath = "/tmp/something2";
-        String srcPath = "/tmp/something3";
-        String docPath = "/tmp/something4";
+        Path tempFile = Files.createTempFile(null, null);
+        Files.write(tempFile, "one".getBytes(StandardCharsets.UTF_8));
+        String pomPath = tempFile.toFile().getAbsolutePath();
 
-        MavenPublisher.main(new String[]{uri() + "/repoRoot", "false", "fred",
+        tempFile = Files.createTempFile(null, null);
+        Files.write(tempFile, "two".getBytes(StandardCharsets.UTF_8));
+        String binPath = tempFile.toFile().getAbsolutePath();
+
+        tempFile = Files.createTempFile(null, null);
+        Files.write(tempFile, "three".getBytes(StandardCharsets.UTF_8));
+        String srcPath = tempFile.toFile().getAbsolutePath();;
+
+        tempFile = Files.createTempFile(null, null);
+        Files.write(tempFile, "four".getBytes(StandardCharsets.UTF_8));
+        String docPath = tempFile.toFile().getAbsolutePath();;
+
+        MavenPublisher.main(new String[]{uri() + "/content/repositories/releases/", "false", "fred",
                 "fredPW", "aaGroup:bbArtifact:111.2.3",
                 pomPath, binPath, srcPath, docPath
         });
